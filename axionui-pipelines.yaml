@@ -1,0 +1,131 @@
+
+trigger:
+  - devlop
+
+variables:
+  storageAccountName: 'axionui'
+
+pool:
+  name: 'Axion Agent'
+
+stages:
+  # STAGE 1: Install, Lint, Build, and SonarQube
+  - stage: Build_And_Analyze
+    displayName: 'Stage 1 - Build and Code Quality'
+    jobs:
+      - job: Build
+        displayName: 'Install, Lint, Build and Analyze'
+        steps:
+          - checkout: self
+            fetchDepth: 0
+
+          - task: UseNode@1
+            displayName: 'Install Node.js'
+            inputs:
+              version: '22.x'
+
+          - script: npm ci
+            displayName: 'Install Dependencies'
+
+          - script: npm run lint -- --quiet
+            displayName: 'Run ESLint'
+            continueOnError: true
+            
+          - task: SonarQubePrepare@7
+            displayName: 'Prepare SonarQube Analysis'
+            inputs:
+              SonarQube: 'AzureDevOps-Axion'
+              scannerMode: 'cli'
+              configMode: 'manual'
+              cliProjectKey: 'Axion'
+              cliProjectName: 'React Application'
+              cliSources: 'src'
+              extraProperties: |
+                sonar.sourceEncoding=UTF-8
+                sonar.exclusions=**/node_modules/**,**/build/**,**/dist/**,**/coverage/**
+          
+          - powershell: |
+              $raw = $env:SONARQUBE_SCANNER_PARAMS
+
+              if ([string]::IsNullOrWhiteSpace($raw)) {
+                  Write-Error "SonarQube scanner parameters were not found."
+                  exit 1
+              }
+
+              $params = $raw | ConvertFrom-Json
+              $params.PSObject.Properties.Remove('sonar.branch.name')
+
+              $updated = $params | ConvertTo-Json -Compress
+              Write-Host "##vso[task.setvariable variable=SONARQUBE_SCANNER_PARAMS]$updated"
+
+              Write-Host "Removed sonar.branch.name for Community Build."
+            displayName: 'Configure SonarQube Community Build'
+            condition: eq(variables['Build.SourceBranch'], 'refs/heads/devlop')
+          - script: npm run build
+            displayName: 'Build React Application'
+            env:
+              CI: 'true'
+
+          - task: SonarQubeAnalyze@7
+            displayName: 'Run SonarQube Analysis'
+
+          - task: SonarQubePublish@7
+            displayName: 'Publish Quality Gate Result'
+            inputs:
+              pollingTimeoutSec: '300'
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish React Build Artifact'
+            inputs:
+              targetPath: '$(Build.SourcesDirectory)\dist'
+              artifact: 'react-build'
+              publishLocation: 'pipeline'
+
+
+  # STAGE 2: Production approval and deployment
+  - stage: Deploy_Production
+    displayName: 'Stage 2 - Production Deployment'
+    dependsOn: Build_And_Analyze
+    condition: succeeded()
+
+    jobs:
+      - deployment: ProductionDeployment
+        displayName: 'Deploy React to Azure Storage'
+        environment: 'production'
+
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: react-build
+
+                - task: AzureCLI@2
+                  displayName: 'Deploy React dist to Azure Static Website'
+                  inputs:
+                    azureSubscription: 'Axion serv connection'
+                    scriptType: ps
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $artifactPath = "$(Pipeline.Workspace)\react-build"
+                      $storageAccount = "$(storageAccountName)"
+
+                      if (!(Test-Path "$artifactPath\index.html")) {
+                        throw "index.html not found in $artifactPath"
+                      }
+
+                      Write-Host "Uploading React production files..."
+
+                      az storage blob upload-batch `
+                        --account-name $storageAccount `
+                        --auth-mode login `
+                        --destination '$web' `
+                        --source $artifactPath `
+                        --overwrite `
+                        --only-show-errors
+
+                      if ($LASTEXITCODE -ne 0) {
+                        throw "Azure Storage deployment failed."
+                      }
+
+                      Write-Host "React application deployed successfully."
