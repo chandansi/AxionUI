@@ -1,0 +1,22 @@
+
+trigger:
+- main
+
+pool:
+  name: Axion Agent
+
+
+stages:
+  - stage: Build
+    displayName: 'Build axion ui'
+    jobs:
+      - job: BuildApp
+        displayName: 'Build application'
+        steps:
+          - task: Docker@2
+            inputs:
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+
+
+
