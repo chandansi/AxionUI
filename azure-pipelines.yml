@@ -79,9 +79,9 @@ stages:
                     scriptType: 'ps'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
-                      $ErrorActionPreference = 'Stop'
+                    $ErrorActionPreference = 'Stop'
 
-		      $imageTag = "$(Build.BuildId)"
+		                  $imageTag = "$(Build.BuildId)"
                       if ([string]::IsNullOrWhiteSpace($imageTag)) {
                         throw "Image tag is empty"
                       }
@@ -105,6 +105,7 @@ stages:
                       $tempManifest = Join-Path $env:AGENT_TEMPDIRECTORY "deployment.yaml"
                       Set-Content -Path $tempManifest -Value $manifest -Encoding utf8
 
+                      
                       kubectl apply -n "$(kubernetesNamespace)" -f $tempManifest
                       if ($LASTEXITCODE -ne 0) { throw "Deployment apply failed" }
 
