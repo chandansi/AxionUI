@@ -1,0 +1,34 @@
+﻿replicaCount: 2
+
+image:
+  repository: raiacr.azurecr.io/axion-ui
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 80
+  protocol: TCP
+
+containerPort: 80
+
+readinessProbe:
+  enabled: true
+  path: /
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  enabled: true
+  path: /
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi

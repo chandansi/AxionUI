@@ -80,29 +80,37 @@ stages:
                     scriptType: 'ps'
                     scriptLocation: 'inlineScript'
                     inlineScript: |
+                      
                       $ErrorActionPreference = 'Stop'
 
                       $imageTag = "$(Build.BuildId)"
                       if ([string]::IsNullOrWhiteSpace($imageTag)) {
-                        throw "Image tag is empty"
+                          throw "Image tag is empty"
                       }
 
-                      $acrLoginServer = "$(acrName).azurecr.io".ToLower()
-                      $image = "$acrLoginServer/$(imageRepository):$imageTag"
+                      az aks get-credentials `
+                        --resource-group "$(aksResourceGroup)" `
+                        --name "$(aksClusterName)" `
+                        --overwrite-existing
 
-                      az aks get-credentials --resource-group "$(aksResourceGroup)" --name "$(aksClusterName)" --overwrite-existing
-                      if ($LASTEXITCODE -ne 0) { throw "Could not get AKS credentials" }
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Could not get AKS credentials"
+                      }
 
-                      kubectl create namespace "$(kubernetesNamespace)" --dry-run=client -o yaml | kubectl apply -f -
-                      if ($LASTEXITCODE -ne 0) { throw "Namespace setup failed" }
+                      helm version
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Helm is not available on the Azure DevOps agent"
+                      }
 
-                      kubectl set image -f k8s/deployment.yaml axion-ui="$image" --local -o yaml | kubectl apply -n "$(kubernetesNamespace)" -f -
-                      if ($LASTEXITCODE -ne 0) { throw "Deployment apply failed" }
+                      helm upgrade --install axion-ui ./helm/axion-ui `
+                        --namespace "$(kubernetesNamespace)" `
+                        --create-namespace `
+                        --set-string image.tag="$imageTag" `
+                        --wait `
+                        --timeout 5m
 
-                      kubectl apply -n "$(kubernetesNamespace)" -f k8s/service.yaml
-                      if ($LASTEXITCODE -ne 0) { throw "Service apply failed" }
-
-                      kubectl rollout status deployment/axion-ui -n "$(kubernetesNamespace)" --timeout=300s
-                      if ($LASTEXITCODE -ne 0) { throw "Deployment rollout failed" }
+                      if ($LASTEXITCODE -ne 0) {
+                          throw "Helm deployment failed"
+                      }
 
                       kubectl get pods,svc -n "$(kubernetesNamespace)"
