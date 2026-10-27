@@ -106,6 +106,7 @@ stages:
                         --namespace "$(kubernetesNamespace)" `
                         --create-namespace `
                         --set-string image.tag="$imageTag" `
+                        --force-conflicts `
                         --wait `
                         --timeout 5m
 
