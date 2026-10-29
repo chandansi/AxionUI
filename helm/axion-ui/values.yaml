@@ -2,7 +2,7 @@
 
 image:
   repository: raiacr.azurecr.io/axion-ui
-  tag: "latest"
+  tag: "194"
   pullPolicy: IfNotPresent
 
 service:
