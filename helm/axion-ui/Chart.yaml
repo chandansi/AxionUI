@@ -1,6 +1,6 @@
-﻿apiVersion: v2
+apiVersion: v2
 name: axion-ui
-description: Helm chart for the AxionUI React application
+description: AxionUI React application managed through Argo CD GitOps
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
